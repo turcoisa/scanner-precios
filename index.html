@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0e27">
+<meta name="format-detection" content="telephone=no">
+<title>Scanner de Precios</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0a0e27; color: #e8eaf6;
+    min-height: 100vh; height: 100%;
+    overflow-x: hidden; -webkit-font-smoothing: antialiased;
+  }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  header {
+    background: linear-gradient(180deg, #1a237e 0%, #0a0e27 100%);
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { margin: 0; font-size: 19px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  header h1::before {
+    content: ""; display: inline-block; width: 24px; height: 24px;
+    background: linear-gradient(135deg, #4fc3f7, #1976d2);
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3,5v18h2V5H3M6,5v18h2V5H6M9,5v6h2V5H9M12,5v10h2V5H12M15,5v4h2V5H15M18,5v14h2V5H18M21,5v2h-2V5H21Z'/></svg>") center/contain no-repeat;
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3,5v18h2V5H3M6,5v18h2V5H6M9,5v6h2V5H9M12,5v10h2V5H12M15,5v4h2V5H15M18,5v14h2V5H18M21,5v2h-2V5H21Z'/></svg>") center/contain no-repeat;
+  }
+  header .sub { font-size: 12px; color: #90a4ae; margin-top: 4px; }
+  #status-bar {
+    padding: 8px 16px; font-size: 12px; text-align: center;
+    background: rgba(255,255,255,0.04); color: #90a4ae;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  #status-bar.error { background: #b71c1c; color: #fff; }
+  #status-bar.ok { background: #1b5e20; color: #fff; }
+  #reader-wrap {
+    position: relative; background: #000;
+    margin: 12px 12px 0; border-radius: 16px; overflow: hidden;
+    aspect-ratio: 4/3; max-height: 38vh;
+  }
+  #reader { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  #reader video, #reader canvas {
+    position: absolute !important; inset: 0;
+    width: 100% !important; height: 100% !important;
+    object-fit: cover !important; display: block;
+    border-radius: 0 !important;
+  }
+  #reader-overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #reader-overlay::before {
+    content: ""; position: absolute;
+    width: 86%; height: 35%;
+    border: 3px solid #4fc3f7; border-radius: 12px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+  }
+  #reader-prompt {
+    position: absolute; bottom: 14px; left: 0; right: 0;
+    text-align: center; color: #fff; font-size: 13px; font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  }
+  #controls { display: flex; gap: 8px; padding: 12px 12px 8px; }
+  button.btn {
+    flex: 1; padding: 14px 12px;
+    border: none; border-radius: 12px;
+    font-size: 15px; font-weight: 600;
+    background: #1976d2; color: #fff;
+    cursor: pointer; transition: opacity 0.15s; -webkit-appearance: none;
+  }
+  button.btn:active { opacity: 0.7; }
+  button.btn.secondary { background: #37474f; }
+  .hidden { display: none !important; }
+  #manual-wrap { padding: 0 12px 8px; }
+  #manual {
+    width: 100%; padding: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05); color: #fff; border-radius: 10px;
+    font-size: 16px; -webkit-appearance: none;
+  }
+  #manual::placeholder { color: #607d8b; }
+  #result-panel {
+    margin: 0 12px 12px; border-radius: 16px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    min-height: 100px;
+    display: flex; flex-direction: column;
+    animation: fadeIn 0.25s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  #result-panel.hidden { display: none; }
+  #result-panel.ok { border-color: #4caf50; background: rgba(76,175,80,0.08); }
+  #result-panel.error { border-color: #ef5350; background: rgba(239,83,80,0.08); }
+  .result-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .result-head .badge {
+    font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px; letter-spacing: 0.5px;
+  }
+  .result-head.ok .badge { background: #4caf50; color: #fff; }
+  .result-head.error .badge { background: #ef5350; color: #fff; }
+  .result-head .head-text { font-size: 13px; color: #90a4ae; word-break: break-all; }
+  .result-body { padding: 16px; }
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: #90a4ae; margin-bottom: 4px;
+  }
+  .field .value { font-size: 17px; word-wrap: break-word; color: #fff; }
+  .field .value.big { font-size: 22px; font-weight: 700; color: #4fc3f7; }
+  .field .value.price {
+    font-size: 28px; font-weight: 700; color: #4caf50;
+    font-variant-numeric: tabular-nums;
+  }
+  .field .value.code { font-family: "SF Mono", Menlo, monospace; font-size: 15px; word-break: break-all; }
+  footer { text-align: center; padding: 16px; font-size: 11px; color: #607d8b; }
+  .pulse {
+    display: inline-block; width: 8px; height: 8px;
+    background: #4caf50; border-radius: 50%;
+    margin-right: 6px; animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  #loading-overlay {
+    position: fixed; inset: 0; background: #0a0e27;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100; transition: opacity 0.4s;
+  }
+  #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: #4fc3f7; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .load-text { margin-top: 16px; font-size: 14px; color: #90a4ae; }
+  .load-progress { margin-top: 4px; font-size: 12px; color: #607d8b; }
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="load-text">Sincronizando base de datos en la nube&hellip;</div>
+  <div class="load-progress" id="load-progress">Cargando productos</div>
+</div>
+
+<header>
+  <h1>Scanner de Precios</h1>
+  <div class="sub" id="data-info">Cargando productos&hellip;</div>
+</header>
+
+<div id="status-bar"><span class="pulse"></span>Toc&aacute; "Iniciar c&aacute;mara" para comenzar</div>
+
+<div id="reader-wrap">
+  <div id="reader"><video id="video"></video></div>
+  <div id="reader-overlay"><div id="reader-prompt">Apunt&aacute; al c&oacute;digo de barras</div></div>
+</div>
+
+<div id="controls">
+  <button class="btn" id="btn-start">Iniciar c&aacute;mara</button>
+  <button class="btn secondary hidden" id="btn-stop">Detener c&aacute;mara</button>
+</div>
+
+<div id="manual-wrap">
+  <input type="text" id="manual" inputmode="numeric" pattern="[0-9]*" placeholder="O escrib&iacute; el c&oacute;digo manualmente&hellip;" autocomplete="off">
+</div>
+
+<div id="result-panel" class="hidden">
+  <div class="result-head" id="result-head">
+    <span class="badge" id="result-badge">&mdash;</span>
+    <span class="head-text" id="result-head-text">&mdash;</span>
+  </div>
+  <div class="result-body" id="result-body"></div>
+</div>
+
+<footer>
+  Scanner de Precios &middot; Sincronizado en la nube
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+<script>
+let PRODUCTOS = {};
+let codeReader = null;
+let lastCode = null;
+
+// 1. Descarga dinámica de la base de datos desde la nube (GitHub Pages)
+async function cargarBaseDeDatos() {
+  try {
+    // El 't=' evita que Safari guarde una copia vieja en caché cuando actualices el archivo
+    const response = await fetch('productos.json?t=' + new Date().getTime());
+    if (!response.ok) throw new Error("No se encontró el archivo productos.json");
+    
+    PRODUCTOS = await response.json();
+    const total = Object.keys(PRODUCTOS).length;
+    
+    document.getElementById('data-info').innerText = `${total} productos cargados`;
+    document.getElementById('load-progress').innerText = `${total} productos activos`;
+    
+    setTimeout(() => {
+      document.getElementById('loading-overlay').classList.add('hidden');
+    }, 300);
+  } catch (err) {
+    console.error(err);
+    document.querySelector('.load-text').innerText = "Error cargando la base de datos";
+    document.getElementById('load-progress').innerText = "Verificá que productos.json esté subido a GitHub";
+  }
+}
+
+// 2. Búsqueda y renderizado de resultados
+function buscarProducto(codigo) {
+  const cleanCode = codigo.trim();
+  if (!cleanCode) return;
+
+  const panel = document.getElementById('result-panel');
+  const head = document.getElementById('result-head');
+  const badge = document.getElementById('result-badge');
+  const headText = document.getElementById('result-head-text');
+  const body = document.getElementById('result-body');
+
+  panel.classList.remove('hidden', 'ok', 'error');
+  head.classList.remove('ok', 'error');
+
+  if (PRODUCTOS[cleanCode]) {
+    const item = PRODUCTOS[cleanCode]; 
+    // Estructura: [cod.articulo, articulo, cod.barra, moneda, precio, vigencia]
+    
+    panel.classList.add('ok');
+    head.classList.add('ok');
+    badge.innerText = 'ENCONTRADO';
+    headText.innerText = `C&oacute;digo: ${cleanCode}`;
+
+    body.innerHTML = `
+      <div class="field">
+        <label>Art&iacute;culo</label>
+        <div class="value big">${item[1]}</div>
+      </div>
+      <div class="field">
+        <label>Precio de Venta</label>
+        <div class="value price">${item[3]} ${item[4]}</div>
+      </div>
+      <div class="field">
+        <label>C&oacute;digo de Art&iacute;culo</label>
+        <div class="value code">${item[0]}</div>
+      </div>
+      <div class="field">
+        <label>&Uacute;ltima Vigencia</label>
+        <div class="value" style="font-size:13px; color:#90a4ae;">${item[5]}</div>
+      </div>
+    `;
+  } else {
+    panel.classList.add('error');
+    head.classList.add('error');
+    badge.innerText = 'INEXISTENTE';
+    headText.innerText = `C&oacute;digo: ${cleanCode}`;
+
+    body.innerHTML = `
+      <div class="field">
+        <div class="value" style="color:#ef5350; font-weight:600;">Producto inexistente en la base de datos</div>
+      </div>
+    `;
+  }
+
+  // Vibración táctil si el iPhone lo soporta
+  if (navigator.vibrate) navigator.vibrate(80);
+}
+
+// 3. Inicialización
+window.addEventListener('load', async () => {
+  await cargarBaseDeDatos();
+
+  codeReader = new ZXing.BrowserMultiFormatReader();
+
+  document.getElementById('btn-start').addEventListener('click', async () => {
+    try {
+      const devices = await codeReader.listVideoInputDevices();
+      // Selecciona preferentemente la cámara trasera en iOS
+      const rearCamera = devices.find(d => /back|rear|posterior/i.test(d.label)) || devices[0];
+
+      codeReader.decodeFromVideoDevice(rearCamera.deviceId, 'video', (result, err) => {
+        if (result && result.text !== lastCode) {
+          lastCode = result.text;
+          buscarProducto(result.text);
+          // Reinicia el bloqueo de código repetido tras 2 segundos
+          setTimeout(() => { lastCode = null; }, 2000);
+        }
+      });
+
+      document.getElementById('btn-start').classList.add('hidden');
+      document.getElementById('btn-stop').classList.remove('hidden');
+      document.getElementById('status-bar').className = 'ok';
+      document.getElementById('status-bar').innerText = 'C&aacute;mara activa &middot; Apunt&aacute; al c&oacute;digo';
+    } catch (err) {
+      console.error(err);
+      document.getElementById('status-bar').className = 'error';
+      document.getElementById('status-bar').innerText = 'Error al acceder a la c&aacute;mara';
+    }
+  });
+
+  document.getElementById('btn-stop').addEventListener('click', () => {
+    codeReader.reset();
+    document.getElementById('btn-start').classList.remove('hidden');
+    document.getElementById('btn-stop').classList.add('hidden');
+    document.getElementById('status-bar').className = '';
+    document.getElementById('status-bar').innerText = 'C&aacute;mara detenida';
+  });
+
+  // Buscador manual
+  const inputManual = document.getElementById('manual');
+  inputManual.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter' || e.keyCode === 13) {
+      buscarProducto(inputManual.value);
+      inputManual.blur();
+    }
+  });
+});
+</script>
+</body>
+</html>
